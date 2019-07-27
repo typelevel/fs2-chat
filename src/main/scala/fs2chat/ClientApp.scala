@@ -1,0 +1,39 @@
+package fs2chat
+
+import cats.effect.{Blocker, ExitCode, IO, IOApp}
+import cats.implicits._
+import com.comcast.ip4s._
+import com.monovore.decline._
+import fs2.io.tcp.SocketGroup
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+
+object ClientApp extends IOApp {
+  def run(args: List[String]): IO[ExitCode] = {
+    val argsParser = Command("fs2chat-client", "FS2 Chat Client") {
+      (
+        Opts
+          .option[String]("address", "Address of chat server")
+          .withDefault("127.0.0.1")
+          .mapValidated(p => IpAddress(p).toValidNel("Invalid IP address")),
+        Opts
+          .option[Int]("port", "Port of chat server")
+          .withDefault(5555)
+          .mapValidated(p => Port(p).toValidNel("Invalid port number"))
+      ).mapN { case (ip, port) => SocketAddress(ip, port) }
+    }
+    argsParser.parse(args) match {
+      case Left(help) => IO(System.err.println(help)).as(ExitCode.Error)
+      case Right(address) =>
+        Blocker[IO]
+          .use { blocker =>
+            val console = Console[IO](blocker)
+            SocketGroup[IO](blocker).use { socketGroup =>
+              Slf4jLogger.create[IO].flatMap { implicit logger =>
+                Client.start[IO](console, socketGroup, address).compile.drain
+              }
+            }
+          }
+          .as(ExitCode.Success)
+    }
+  }
+}
