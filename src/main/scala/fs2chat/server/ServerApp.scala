@@ -1,4 +1,5 @@
 package fs2chat
+package server
 
 import cats.effect.{Blocker, ExitCode, IO, IOApp}
 import cats.implicits._

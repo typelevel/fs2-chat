@@ -1,15 +1,19 @@
 package fs2chat
+package client
 
 import cats.effect.{Blocker, ContextShift, Sync}
+import cats.implicits._
 import org.jline.reader.LineReaderBuilder
 import org.jline.utils.{AttributedStringBuilder, AttributedStyle}
+import org.jline.reader.EndOfFileException
+import org.jline.reader.UserInterruptException
 
 trait Console[F[_]] {
   def info(msg: String): F[Unit]
   def alert(msg: String): F[Unit]
-  def message(user: String, msg: String): F[Unit]
+  def message(user: Username, msg: String): F[Unit]
   def errorln(msg: String): F[Unit]
-  def readLine(prompt: String): F[String]
+  def readLine(prompt: String): F[Option[String]]
 }
 
 object Console {
@@ -32,8 +36,8 @@ object Console {
             .toAnsi)
 
       def info(msg: String): F[Unit] = println("*** " + msg)
-      def message(user: String, msg: String): F[Unit] =
-        println(s"$user> $msg")
+      def message(user: Username, msg: String): F[Unit] =
+        println(s"${user.value}> $msg")
 
       def errorln(msg: String): F[Unit] =
         println(
@@ -42,7 +46,12 @@ object Console {
             .append("*** " + msg)
             .toAnsi)
 
-      def readLine(prompt: String): F[String] =
-        blocker.delay(reader.readLine(prompt))
+      def readLine(prompt: String): F[Option[String]] =
+        blocker
+          .delay(Some(reader.readLine(prompt)): Option[String])
+          .handleErrorWith {
+            case _: EndOfFileException     => (None: Option[String]).pure[F]
+            case _: UserInterruptException => (None: Option[String]).pure[F]
+          }
     }
 }

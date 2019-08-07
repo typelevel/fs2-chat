@@ -30,3 +30,5 @@ scalacOptions ++= List(
   "-Ywarn-unused"
 )
 scalafixDependencies in ThisBuild += "com.nequissimus" %% "sort-imports" % "0.1.3"
+
+enablePlugins(UniversalPlugin, JavaAppPackaging)
