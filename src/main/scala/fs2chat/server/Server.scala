@@ -105,14 +105,13 @@ object Server {
       Stream.eval_(
         clientState.outgoing.enqueue1(
           Protocol.ServerCommand.Alert("Welcome to FS2 Chat!"))) ++
-      Stream(
-        readClientSocket(clientState.incoming, clientSocket),
-        writeClientSocket(clientState.outgoing, clientSocket),
-        processIncoming(clients,
-                        clientState.id,
-                        clientState.incoming,
-                        clientState.outgoing)
-      ).parJoinUnbounded
+      readClientSocket(clientState.incoming, clientSocket)
+        .concurrently(writeClientSocket(clientState.outgoing, clientSocket))
+        .concurrently(
+          processIncoming(clients,
+                          clientState.id,
+                          clientState.incoming,
+                          clientState.outgoing))
   }.handleErrorWith {
     case _: UserQuit =>
       Stream.eval_(
@@ -134,7 +133,7 @@ object Server {
       clientSocket: Socket[F]): Stream[F, Nothing] =
     Stream
       .repeatEval(clientSocket.read(1024))
-      .unNone
+      .unNoneTerminate
       .flatMap(Stream.chunk)
       .through(StreamDecoder.many(Protocol.ClientCommand.codec).toPipeByte[F])
       .through(incoming.enqueue)
