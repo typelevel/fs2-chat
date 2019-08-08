@@ -1,33 +1,44 @@
 package fs2chat
 package server
 
-import cats.{FlatMap, MonadError}
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, Sync}
 import cats.implicits._
+import cats.{FlatMap, MonadError}
 import com.comcast.ip4s.Port
-import fs2.{Chunk, RaiseThrowable, Stream}
-import fs2.concurrent.{Dequeue, Enqueue, Queue}
+import fs2.Stream
 import fs2.io.tcp.{Socket, SocketGroup}
 import io.chrisdavenport.log4cats.Logger
 import java.net.InetSocketAddress
 import java.util.UUID
-import scodec.stream.{StreamDecoder, StreamEncoder}
 
 object Server {
+
+  /**
+    * Represents a client that has connected to this server.
+    *
+    * After connecting, clients must send a [[Protocol.ClientCommand.RequestUsername]]
+    * message, requesting a username. The server will either accept that request or
+    * in the event that the request username is taken, will assign a unique username.
+    * Until this exchange has completed, the `username` field is `None` and the client
+    * will receive no messages or alerts from the server.
+    */
   private case class ConnectedClient[F[_]](
       id: UUID,
       username: Option[Username],
-      outgoing: Queue[F, Protocol.ServerCommand],
-      incoming: Queue[F, Protocol.ClientCommand])
+      messageSocket: MessageSocket[F,
+                                   Protocol.ClientCommand,
+                                   Protocol.ServerCommand])
 
   private object ConnectedClient {
-    def apply[F[_]: Concurrent]: F[ConnectedClient[F]] =
+    def apply[F[_]: Concurrent](socket: Socket[F]): F[ConnectedClient[F]] =
       for {
         id <- Sync[F].delay(UUID.randomUUID)
-        outgoing <- Queue.bounded[F, Protocol.ServerCommand](1024)
-        incoming <- Queue.bounded[F, Protocol.ClientCommand](32)
-      } yield ConnectedClient(id, None, outgoing, incoming)
+        messageSocket <- MessageSocket(socket,
+                                       Protocol.ClientCommand.codec,
+                                       Protocol.ServerCommand.codec,
+                                       1024)
+      } yield ConnectedClient(id, None, messageSocket)
   }
 
   private class Clients[F[_]: Sync](
@@ -57,7 +68,7 @@ object Server {
       }
 
     def broadcast(cmd: Protocol.ServerCommand): F[Unit] =
-      named.flatMap(_.traverse_(_.outgoing.enqueue1(cmd)))
+      named.flatMap(_.traverse_(_.messageSocket.write1(cmd)))
   }
 
   private object Clients {
@@ -75,7 +86,6 @@ object Server {
         .flatMap { clients =>
           socketGroup.server[F](new InetSocketAddress(port.value)).map {
             clientSocketResource =>
-              val registerClient = ConnectedClient[F].flatTap(clients.register)
               def unregisterClient(state: ConnectedClient[F]) =
                 clients.unregister(state.id).flatMap { client =>
                   client
@@ -85,12 +95,14 @@ object Server {
                         s"$username disconnected.")))
                 } *> Logger[F].info(s"Unregistered client ${state.id}")
               Stream
-                .bracket(registerClient)(unregisterClient(_))
-                .flatMap { client =>
-                  Stream.resource(clientSocketResource).flatMap {
-                    clientSocket =>
+                .resource(clientSocketResource)
+                .flatMap { clientSocket =>
+                  Stream
+                    .bracket(ConnectedClient[F](clientSocket).flatTap(
+                      clients.register))(unregisterClient(_))
+                    .flatMap { client =>
                       handleClient[F](clients, client, clientSocket)
-                  }
+                    }
                 }
                 .scope
           }
@@ -103,15 +115,9 @@ object Server {
       clientSocket: Socket[F]): Stream[F, Nothing] = {
     logNewClient(clientState, clientSocket) ++
       Stream.eval_(
-        clientState.outgoing.enqueue1(
+        clientState.messageSocket.write1(
           Protocol.ServerCommand.Alert("Welcome to FS2 Chat!"))) ++
-      readClientSocket(clientState.incoming, clientSocket)
-        .concurrently(writeClientSocket(clientState.outgoing, clientSocket))
-        .concurrently(
-          processIncoming(clients,
-                          clientState.id,
-                          clientState.incoming,
-                          clientState.outgoing))
+      processIncoming(clients, clientState.id, clientState.messageSocket)
   }.handleErrorWith {
     case _: UserQuit =>
       Stream.eval_(
@@ -128,42 +134,23 @@ object Server {
       Logger[F].info(s"Accepted client ${clientState.id} on $clientAddress")
     })
 
-  private def readClientSocket[F[_]: FlatMap: Logger: RaiseThrowable](
-      incoming: Enqueue[F, Protocol.ClientCommand],
-      clientSocket: Socket[F]): Stream[F, Nothing] =
-    Stream
-      .repeatEval(clientSocket.read(1024))
-      .unNoneTerminate
-      .flatMap(Stream.chunk)
-      .through(StreamDecoder.many(Protocol.ClientCommand.codec).toPipeByte[F])
-      .through(incoming.enqueue)
-      .drain
-
-  private def writeClientSocket[F[_]: FlatMap: Logger: RaiseThrowable](
-      outgoing: Dequeue[F, Protocol.ServerCommand],
-      clientSocket: Socket[F]): Stream[F, Nothing] =
-    outgoing.dequeue
-      .through(StreamEncoder.many(Protocol.ServerCommand.codec).toPipe)
-      .flatMap(bits => Stream.chunk(Chunk.byteVector(bits.bytes)))
-      .through(clientSocket.writes(None))
-      .drain
-
   private def processIncoming[F[_]](
       clients: Clients[F],
       clientId: UUID,
-      incoming: Dequeue[F, Protocol.ClientCommand],
-      outgoing: Enqueue[F, Protocol.ServerCommand])(
+      messageSocket: MessageSocket[F,
+                                   Protocol.ClientCommand,
+                                   Protocol.ServerCommand])(
       implicit F: MonadError[F, Throwable]): Stream[F, Nothing] =
-    incoming.dequeue.evalMap {
+    messageSocket.read.evalMap {
       case Protocol.ClientCommand.RequestUsername(username) =>
         clients.setUsername(clientId, username).flatMap { nameToSet =>
           val alertIfAltered =
             if (username =!= nameToSet)
-              outgoing.enqueue1(
+              messageSocket.write1(
                 Protocol.ServerCommand.Alert(
                   s"$username already taken, name set to $nameToSet"))
             else F.unit
-          alertIfAltered *> outgoing.enqueue1(
+          alertIfAltered *> messageSocket.write1(
             Protocol.ServerCommand.SetUsername(nameToSet)) *>
             clients.broadcast(
               Protocol.ServerCommand.Alert(s"$nameToSet connected."))
@@ -176,13 +163,14 @@ object Server {
               val usernames = clients.named.map(_.flatMap(_.username).sorted)
               usernames.flatMap(
                 users =>
-                  outgoing.enqueue1(
+                  messageSocket.write1(
                     Protocol.ServerCommand.Alert(users.mkString(", "))))
             case "quit" =>
-              outgoing.enqueue1(Protocol.ServerCommand.Disconnect) *>
+              messageSocket.write1(Protocol.ServerCommand.Disconnect) *>
                 F.raiseError(new UserQuit): F[Unit]
             case _ =>
-              outgoing.enqueue1(Protocol.ServerCommand.Alert("Unknown command"))
+              messageSocket.write1(
+                Protocol.ServerCommand.Alert("Unknown command"))
           }
         } else {
           clients.get(clientId).flatMap {

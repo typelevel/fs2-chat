@@ -3,15 +3,12 @@ package client
 
 import cats.ApplicativeError
 import cats.effect.{Concurrent, ContextShift, Timer}
-import cats.implicits._
 import com.comcast.ip4s.{IpAddress, SocketAddress}
-import fs2.{Chunk, RaiseThrowable, Stream}
-import fs2.concurrent.Queue
-import fs2.io.tcp.{Socket, SocketGroup}
+import fs2.io.tcp.SocketGroup
+import fs2.{RaiseThrowable, Stream}
 import io.chrisdavenport.log4cats.Logger
 import java.net.ConnectException
 import scala.concurrent.duration._
-import scodec.stream.{StreamDecoder, StreamEncoder}
 
 object Client {
   def start[F[_]: Concurrent: ContextShift: Timer: Logger](
@@ -29,9 +26,6 @@ object Client {
       case _: UserQuit => Stream.empty
     }
 
-  private case class State[F[_]](outgoing: Queue[F, Protocol.ClientCommand],
-                                 incoming: Queue[F, Protocol.ServerCommand])
-
   private def connect[F[_]: Concurrent: ContextShift: Logger](
       console: Console[F],
       socketGroup: SocketGroup,
@@ -42,48 +36,27 @@ object Client {
         .resource(socketGroup.client[F](address.toInetSocketAddress))
         .flatMap { socket =>
           Stream.eval_(console.info("🎉 Connected! 🎊")) ++
-            Stream.eval(makeState[F]).flatMap { state =>
-              Stream.eval_(state.outgoing.enqueue1(
-                Protocol.ClientCommand.RequestUsername(desiredUsername))) ++
-                Stream(
-                  readServerSocket(state, socket),
-                  writeServerSocket(state, socket),
-                  processIncoming(state.incoming, console),
-                  processOutgoing(state.outgoing, console)
-                ).parJoinUnbounded
-            }
+            Stream
+              .eval(
+                MessageSocket(socket,
+                              Protocol.ServerCommand.codec,
+                              Protocol.ClientCommand.codec,
+                              128))
+              .flatMap { messageSocket =>
+                Stream.eval_(messageSocket.write1(
+                  Protocol.ClientCommand.RequestUsername(desiredUsername))) ++
+                  processIncoming(messageSocket, console).concurrently(
+                    processOutgoing(messageSocket, console))
+              }
         }
 
-  private def makeState[F[_]: Concurrent] =
-    for {
-      outgoing <- Queue.bounded[F, Protocol.ClientCommand](32)
-      incoming <- Queue.bounded[F, Protocol.ServerCommand](1024)
-    } yield State(outgoing, incoming)
-
-  private def readServerSocket[F[_]: RaiseThrowable](
-      state: State[F],
-      socket: Socket[F]): Stream[F, Nothing] =
-    Stream
-      .repeatEval(socket.read(1024))
-      .unNone
-      .flatMap(Stream.chunk)
-      .through(StreamDecoder.many(Protocol.ServerCommand.codec).toPipeByte)
-      .through(state.incoming.enqueue)
-      .drain
-
-  private def writeServerSocket[F[_]: RaiseThrowable](
-      state: State[F],
-      socket: Socket[F]): Stream[F, Nothing] =
-    state.outgoing.dequeue
-      .through(StreamEncoder.many(Protocol.ClientCommand.codec).toPipe)
-      .flatMap(bits => Stream.chunk(Chunk.byteVector(bits.bytes)))
-      .through(socket.writes(None))
-      .drain
-
-  private def processIncoming[F[_]](incoming: Queue[F, Protocol.ServerCommand],
-                                    console: Console[F])(
-      implicit F: ApplicativeError[F, Throwable]): Stream[F, Nothing] =
-    incoming.dequeue.evalMap {
+  private def processIncoming[F[_]](
+      messageSocket: MessageSocket[F,
+                                   Protocol.ServerCommand,
+                                   Protocol.ClientCommand],
+      console: Console[F])(
+      implicit F: ApplicativeError[F, Throwable]): Stream[F, Unit] =
+    messageSocket.read.evalMap {
       case Protocol.ServerCommand.Alert(txt) =>
         console.alert(txt)
       case Protocol.ServerCommand.Message(username, txt) =>
@@ -92,11 +65,13 @@ object Client {
         console.alert("Assigned username: " + username)
       case Protocol.ServerCommand.Disconnect =>
         F.raiseError[Unit](new UserQuit)
-    }.drain
+    }
 
   private def processOutgoing[F[_]: RaiseThrowable](
-      outgoing: Queue[F, Protocol.ClientCommand],
-      console: Console[F]): Stream[F, Nothing] =
+      messageSocket: MessageSocket[F,
+                                   Protocol.ServerCommand,
+                                   Protocol.ClientCommand],
+      console: Console[F]): Stream[F, Unit] =
     Stream
       .repeatEval(console.readLine("> "))
       .flatMap {
@@ -104,6 +79,5 @@ object Client {
         case None      => Stream.raiseError[F](new UserQuit)
       }
       .map(txt => Protocol.ClientCommand.SendMessage(txt))
-      .through(outgoing.enqueue)
-      .drain
+      .evalMap(messageSocket.write1)
 }

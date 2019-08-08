@@ -3,10 +3,10 @@ package client
 
 import cats.effect.{Blocker, ContextShift, Sync}
 import cats.implicits._
-import org.jline.reader.LineReaderBuilder
-import org.jline.utils.{AttributedStringBuilder, AttributedStyle}
 import org.jline.reader.EndOfFileException
+import org.jline.reader.LineReaderBuilder
 import org.jline.reader.UserInterruptException
+import org.jline.utils.{AttributedStringBuilder, AttributedStyle}
 
 trait Console[F[_]] {
   def info(msg: String): F[Unit]
