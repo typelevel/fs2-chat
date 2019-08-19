@@ -4,8 +4,8 @@ package client
 import cats.ApplicativeError
 import cats.effect.{Concurrent, ContextShift, Timer}
 import com.comcast.ip4s.{IpAddress, SocketAddress}
-import fs2.io.tcp.SocketGroup
 import fs2.{RaiseThrowable, Stream}
+import fs2.io.tcp.SocketGroup
 import io.chrisdavenport.log4cats.Logger
 import java.net.ConnectException
 import scala.concurrent.duration._

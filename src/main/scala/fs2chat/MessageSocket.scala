@@ -2,14 +2,11 @@ package fs2chat
 
 import cats.effect.Concurrent
 import cats.implicits._
-import fs2.Chunk
-import fs2.Stream
+import fs2.{Chunk, Stream}
 import fs2.concurrent.Queue
 import fs2.io.tcp.Socket
-import scodec.Decoder
-import scodec.Encoder
-import scodec.stream.StreamDecoder
-import scodec.stream.StreamEncoder
+import scodec.{Decoder, Encoder}
+import scodec.stream.{StreamDecoder, StreamEncoder}
 
 /**
   * Socket which reads a stream of messages of type `In` and allows writing
