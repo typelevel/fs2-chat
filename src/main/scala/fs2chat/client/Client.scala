@@ -60,7 +60,7 @@ object Client {
       case Protocol.ServerCommand.Alert(txt) =>
         console.alert(txt)
       case Protocol.ServerCommand.Message(username, txt) =>
-        console.message(username, txt)
+        console.println(s"$username> $txt")
       case Protocol.ServerCommand.SetUsername(username) =>
         console.alert("Assigned username: " + username)
       case Protocol.ServerCommand.Disconnect =>

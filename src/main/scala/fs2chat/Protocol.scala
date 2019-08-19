@@ -3,13 +3,14 @@ package fs2chat
 import scodec.Codec
 import scodec.codecs._
 
+/** Defines the messages exchanged between the client and server. */
 object Protocol {
-  sealed trait Command
 
   private val username: Codec[Username] =
     utf8_32.xmapc(Username.apply)(_.value)
 
-  sealed trait ClientCommand extends Command
+  /** Base trait for messages sent from the client to the server. */
+  sealed trait ClientCommand
   object ClientCommand {
     case class RequestUsername(name: Username) extends ClientCommand
     case class SendMessage(value: String) extends ClientCommand
@@ -20,7 +21,8 @@ object Protocol {
       .typecase(2, utf8_32.as[SendMessage])
   }
 
-  sealed trait ServerCommand extends Command
+  /** Base trait for messages sent from the server to the client. */
+  sealed trait ServerCommand
   object ServerCommand {
     case class SetUsername(name: Username) extends ServerCommand
     case class Alert(text: String) extends ServerCommand

@@ -9,8 +9,8 @@ import fs2.io.tcp.SocketGroup
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 
 object ClientApp extends IOApp {
-  def run(args: List[String]): IO[ExitCode] = {
-    val argsParser = Command("fs2chat-client", "FS2 Chat Client") {
+  private val argsParser: Command[(Username, SocketAddress[IpAddress])] =
+    Command("fs2chat-client", "FS2 Chat Client") {
       (
         Opts.option[String]("username", "Desired username").map(Username.apply),
         Opts
@@ -26,18 +26,21 @@ object ClientApp extends IOApp {
           desiredUsername -> SocketAddress(ip, port)
       }
     }
+
+  def run(args: List[String]): IO[ExitCode] = {
     argsParser.parse(args) match {
       case Left(help) => IO(System.err.println(help)).as(ExitCode.Error)
       case Right((desiredUsername, address)) =>
         Blocker[IO]
           .use { blocker =>
-            val console = Console[IO](blocker)
-            SocketGroup[IO](blocker).use { socketGroup =>
-              Slf4jLogger.create[IO].flatMap { implicit logger =>
-                Client
-                  .start[IO](console, socketGroup, address, desiredUsername)
-                  .compile
-                  .drain
+            Console[IO](blocker).flatMap { console =>
+              SocketGroup[IO](blocker).use { socketGroup =>
+                Slf4jLogger.create[IO].flatMap { implicit logger =>
+                  Client
+                    .start[IO](console, socketGroup, address, desiredUsername)
+                    .compile
+                    .drain
+                }
               }
             }
           }

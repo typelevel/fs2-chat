@@ -11,6 +11,10 @@ import scodec.Encoder
 import scodec.stream.StreamDecoder
 import scodec.stream.StreamEncoder
 
+/**
+  * Socket which reads a stream of messages of type `In` and allows writing
+  * messages of type `Out`.
+  */
 trait MessageSocket[F[_], In, Out] {
   def read: Stream[F, In]
   def write1(out: Out): F[Unit]
