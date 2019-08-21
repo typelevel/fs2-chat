@@ -29,7 +29,7 @@ object Client {
       console: Console[F],
       socketGroup: SocketGroup,
       address: SocketAddress[IpAddress],
-      desiredUsername: Username) =
+      desiredUsername: Username): Stream[F, Unit] =
     Stream.eval_(console.info(s"Connecting to server $address")) ++
       Stream
         .resource(socketGroup.client[F](address.toInetSocketAddress))

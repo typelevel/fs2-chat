@@ -99,7 +99,7 @@ object Server {
                 .flatMap { clientSocket =>
                   Stream
                     .bracket(ConnectedClient[F](clientSocket).flatTap(
-                      clients.register))(unregisterClient(_))
+                      clients.register))(unregisterClient)
                     .flatMap { client =>
                       handleClient[F](clients, client, clientSocket)
                     }
