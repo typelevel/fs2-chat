@@ -6,12 +6,11 @@ import cats.effect.{Concurrent, ContextShift, Timer}
 import com.comcast.ip4s.{IpAddress, SocketAddress}
 import fs2.{RaiseThrowable, Stream}
 import fs2.io.tcp.SocketGroup
-import io.chrisdavenport.log4cats.Logger
 import java.net.ConnectException
 import scala.concurrent.duration._
 
 object Client {
-  def start[F[_]: Concurrent: ContextShift: Timer: Logger](
+  def start[F[_]: Concurrent: ContextShift: Timer](
       console: Console[F],
       socketGroup: SocketGroup,
       address: SocketAddress[IpAddress],
@@ -26,7 +25,7 @@ object Client {
       case _: UserQuit => Stream.empty
     }
 
-  private def connect[F[_]: Concurrent: ContextShift: Logger](
+  private def connect[F[_]: Concurrent: ContextShift](
       console: Console[F],
       socketGroup: SocketGroup,
       address: SocketAddress[IpAddress],

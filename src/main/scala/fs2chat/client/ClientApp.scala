@@ -6,7 +6,6 @@ import cats.implicits._
 import com.comcast.ip4s._
 import com.monovore.decline._
 import fs2.io.tcp.SocketGroup
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 
 object ClientApp extends IOApp {
   private val argsParser: Command[(Username, SocketAddress[IpAddress])] =
@@ -35,12 +34,10 @@ object ClientApp extends IOApp {
           .use { blocker =>
             Console[IO](blocker).flatMap { console =>
               SocketGroup[IO](blocker).use { socketGroup =>
-                Slf4jLogger.create[IO].flatMap { implicit logger =>
-                  Client
-                    .start[IO](console, socketGroup, address, desiredUsername)
-                    .compile
-                    .drain
-                }
+                Client
+                  .start[IO](console, socketGroup, address, desiredUsername)
+                  .compile
+                  .drain
               }
             }
           }
