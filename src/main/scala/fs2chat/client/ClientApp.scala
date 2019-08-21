@@ -11,7 +11,9 @@ object ClientApp extends IOApp {
   private val argsParser: Command[(Username, SocketAddress[IpAddress])] =
     Command("fs2chat-client", "FS2 Chat Client") {
       (
-        Opts.option[String]("username", "Desired username").map(Username.apply),
+        Opts
+          .option[String]("username", "Desired username", "u")
+          .map(Username.apply),
         Opts
           .option[String]("address", "Address of chat server")
           .withDefault("127.0.0.1")
