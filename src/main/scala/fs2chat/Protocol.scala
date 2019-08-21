@@ -7,7 +7,7 @@ import scodec.codecs._
 object Protocol {
 
   private val username: Codec[Username] =
-    utf8_32.xmapc(Username.apply)(_.value)
+    utf8_32.as[Username]
 
   /** Base trait for messages sent from the client to the server. */
   sealed trait ClientCommand

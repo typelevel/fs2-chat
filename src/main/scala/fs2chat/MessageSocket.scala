@@ -30,10 +30,8 @@ object MessageSocket {
     } yield
       new MessageSocket[F, In, Out] {
         def read: Stream[F, In] = {
-          val readSocket = Stream
-            .repeatEval(socket.read(1024))
-            .unNoneTerminate
-            .flatMap(Stream.chunk)
+          val readSocket = socket
+            .reads(1024)
             .through(StreamDecoder.many(inDecoder).toPipeByte[F])
 
           val writeOutput = outgoing.dequeue
