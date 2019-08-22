@@ -2,7 +2,7 @@ package fs2chat
 
 import cats.effect.Concurrent
 import cats.implicits._
-import fs2.{Chunk, Stream}
+import fs2.Stream
 import fs2.concurrent.Queue
 import fs2.io.tcp.Socket
 import scodec.{Decoder, Encoder}
@@ -35,8 +35,7 @@ object MessageSocket {
             .through(StreamDecoder.many(inDecoder).toPipeByte[F])
 
           val writeOutput = outgoing.dequeue
-            .through(StreamEncoder.many(outEncoder).toPipe)
-            .flatMap(bits => Stream.chunk(Chunk.byteVector(bits.bytes)))
+            .through(StreamEncoder.many(outEncoder).toPipeByte)
             .through(socket.writes(None))
 
           readSocket.concurrently(writeOutput)
