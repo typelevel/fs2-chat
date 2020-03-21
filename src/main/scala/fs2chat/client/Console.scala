@@ -36,14 +36,16 @@ object Console {
             new AttributedStringBuilder()
               .style(AttributedStyle.DEFAULT.foreground(AttributedStyle.BLUE))
               .append("📢 " + msg)
-              .toAnsi)
+              .toAnsi
+          )
 
         def errorln(msg: String): F[Unit] =
           println(
             new AttributedStringBuilder()
               .style(AttributedStyle.DEFAULT.foreground(AttributedStyle.RED))
               .append("❌ " + msg)
-              .toAnsi)
+              .toAnsi
+          )
 
         def readLine(prompt: String): F[Option[String]] =
           blocker

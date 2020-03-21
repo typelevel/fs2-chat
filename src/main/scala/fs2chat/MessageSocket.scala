@@ -27,19 +27,18 @@ object MessageSocket {
   ): F[MessageSocket[F, In, Out]] =
     for {
       outgoing <- Queue.bounded[F, Out](outputBound)
-    } yield
-      new MessageSocket[F, In, Out] {
-        def read: Stream[F, In] = {
-          val readSocket = socket
-            .reads(1024)
-            .through(StreamDecoder.many(inDecoder).toPipeByte[F])
+    } yield new MessageSocket[F, In, Out] {
+      def read: Stream[F, In] = {
+        val readSocket = socket
+          .reads(1024)
+          .through(StreamDecoder.many(inDecoder).toPipeByte[F])
 
-          val writeOutput = outgoing.dequeue
-            .through(StreamEncoder.many(outEncoder).toPipeByte)
-            .through(socket.writes(None))
+        val writeOutput = outgoing.dequeue
+          .through(StreamEncoder.many(outEncoder).toPipeByte)
+          .through(socket.writes(None))
 
-          readSocket.concurrently(writeOutput)
-        }
-        def write1(out: Out): F[Unit] = outgoing.enqueue1(out)
+        readSocket.concurrently(writeOutput)
       }
+      def write1(out: Out): F[Unit] = outgoing.enqueue1(out)
+    }
 }

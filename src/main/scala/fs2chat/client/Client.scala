@@ -14,12 +14,12 @@ object Client {
       console: Console[F],
       socketGroup: SocketGroup,
       address: SocketAddress[IpAddress],
-      desiredUsername: Username): Stream[F, Unit] =
+      desiredUsername: Username
+  ): Stream[F, Unit] =
     connect(console, socketGroup, address, desiredUsername).handleErrorWith {
       case _: ConnectException =>
         val retryDelay = 5.seconds
-        Stream.eval_(
-          console.errorln(s"Failed to connect. Retrying in $retryDelay.")) ++
+        Stream.eval_(console.errorln(s"Failed to connect. Retrying in $retryDelay.")) ++
           start(console, socketGroup, address, desiredUsername)
             .delayBy(retryDelay)
       case _: UserQuit => Stream.empty
@@ -29,7 +29,8 @@ object Client {
       console: Console[F],
       socketGroup: SocketGroup,
       address: SocketAddress[IpAddress],
-      desiredUsername: Username): Stream[F, Unit] =
+      desiredUsername: Username
+  ): Stream[F, Unit] =
     Stream.eval_(console.info(s"Connecting to server $address")) ++
       Stream
         .resource(socketGroup.client[F](address.toInetSocketAddress))
@@ -37,24 +38,27 @@ object Client {
           Stream.eval_(console.info("🎉 Connected! 🎊")) ++
             Stream
               .eval(
-                MessageSocket(socket,
-                              Protocol.ServerCommand.codec,
-                              Protocol.ClientCommand.codec,
-                              128))
+                MessageSocket(
+                  socket,
+                  Protocol.ServerCommand.codec,
+                  Protocol.ClientCommand.codec,
+                  128
+                )
+              )
               .flatMap { messageSocket =>
-                Stream.eval_(messageSocket.write1(
-                  Protocol.ClientCommand.RequestUsername(desiredUsername))) ++
+                Stream.eval_(
+                  messageSocket.write1(Protocol.ClientCommand.RequestUsername(desiredUsername))
+                ) ++
                   processIncoming(messageSocket, console).concurrently(
-                    processOutgoing(messageSocket, console))
+                    processOutgoing(messageSocket, console)
+                  )
               }
         }
 
   private def processIncoming[F[_]](
-      messageSocket: MessageSocket[F,
-                                   Protocol.ServerCommand,
-                                   Protocol.ClientCommand],
-      console: Console[F])(
-      implicit F: ApplicativeError[F, Throwable]): Stream[F, Unit] =
+      messageSocket: MessageSocket[F, Protocol.ServerCommand, Protocol.ClientCommand],
+      console: Console[F]
+  )(implicit F: ApplicativeError[F, Throwable]): Stream[F, Unit] =
     messageSocket.read.evalMap {
       case Protocol.ServerCommand.Alert(txt) =>
         console.alert(txt)
@@ -67,10 +71,9 @@ object Client {
     }
 
   private def processOutgoing[F[_]: RaiseThrowable](
-      messageSocket: MessageSocket[F,
-                                   Protocol.ServerCommand,
-                                   Protocol.ClientCommand],
-      console: Console[F]): Stream[F, Unit] =
+      messageSocket: MessageSocket[F, Protocol.ServerCommand, Protocol.ClientCommand],
+      console: Console[F]
+  ): Stream[F, Unit] =
     Stream
       .repeatEval(console.readLine("> "))
       .flatMap {
