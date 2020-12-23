@@ -1,7 +1,7 @@
 package fs2chat
 package client
 
-import cats.effect.{Blocker, ExitCode, IO, IOApp}
+import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits._
 import com.comcast.ip4s._
 import com.monovore.decline._
@@ -32,15 +32,13 @@ object ClientApp extends IOApp {
     argsParser.parse(args) match {
       case Left(help) => IO(System.err.println(help)).as(ExitCode.Error)
       case Right((desiredUsername, address)) =>
-        Blocker[IO]
-          .use { blocker =>
-            Console[IO](blocker).flatMap { console =>
-              SocketGroup[IO](blocker).use { socketGroup =>
-                Client
-                  .start[IO](console, socketGroup, address, desiredUsername)
-                  .compile
-                  .drain
-              }
+        Console[IO]
+          .flatMap { console =>
+            SocketGroup[IO]().use { socketGroup =>
+              Client
+                .start[IO](console, socketGroup, address, desiredUsername)
+                .compile
+                .drain
             }
           }
           .as(ExitCode.Success)

@@ -2,15 +2,16 @@ package fs2chat
 package client
 
 import cats.ApplicativeError
-import cats.effect.{Concurrent, ContextShift, Timer}
+import cats.effect.{Concurrent, Temporal}
 import com.comcast.ip4s.{IpAddress, SocketAddress}
 import fs2.{RaiseThrowable, Stream}
+import fs2.io.Network
 import fs2.io.tcp.SocketGroup
 import java.net.ConnectException
 import scala.concurrent.duration._
 
 object Client {
-  def start[F[_]: Concurrent: ContextShift: Timer](
+  def start[F[_]: Temporal: Network](
       console: Console[F],
       socketGroup: SocketGroup,
       address: SocketAddress[IpAddress],
@@ -25,7 +26,7 @@ object Client {
       case _: UserQuit => Stream.empty
     }
 
-  private def connect[F[_]: Concurrent: ContextShift](
+  private def connect[F[_]: Concurrent: Network](
       console: Console[F],
       socketGroup: SocketGroup,
       address: SocketAddress[IpAddress],

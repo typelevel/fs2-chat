@@ -1,12 +1,12 @@
 package fs2chat
 package server
 
-import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift, Sync}
+import cats.effect.{Async, Concurrent, Ref, Sync}
 import cats.implicits._
 import cats.{FlatMap, MonadError}
 import com.comcast.ip4s.Port
 import fs2.Stream
+import fs2.io.Network
 import fs2.io.tcp.{Socket, SocketGroup}
 import io.chrisdavenport.log4cats.Logger
 import java.net.InetSocketAddress
@@ -30,7 +30,7 @@ object Server {
   )
 
   private object ConnectedClient {
-    def apply[F[_]: Concurrent](socket: Socket[F]): F[ConnectedClient[F]] =
+    def apply[F[_]: Async](socket: Socket[F]): F[ConnectedClient[F]] =
       for {
         id <- Sync[F].delay(UUID.randomUUID)
         messageSocket <- MessageSocket(
@@ -42,7 +42,7 @@ object Server {
       } yield ConnectedClient(id, None, messageSocket)
   }
 
-  private class Clients[F[_]: Sync](ref: Ref[F, Map[UUID, ConnectedClient[F]]]) {
+  private class Clients[F[_]: Concurrent](ref: Ref[F, Map[UUID, ConnectedClient[F]]]) {
     def get(id: UUID): F[Option[ConnectedClient[F]]] = ref.get.map(_.get(id))
     def all: F[List[ConnectedClient[F]]] = ref.get.map(_.values.toList)
     def named: F[List[ConnectedClient[F]]] =
@@ -68,13 +68,13 @@ object Server {
   }
 
   private object Clients {
-    def apply[F[_]: Sync]: F[Clients[F]] =
+    def apply[F[_]: Concurrent]: F[Clients[F]] =
       Ref[F]
         .of(Map.empty[UUID, ConnectedClient[F]])
         .map(ref => new Clients(ref))
   }
 
-  def start[F[_]: Concurrent: ContextShift: Logger](socketGroup: SocketGroup, port: Port) =
+  def start[F[_]: Async: Network: Logger](socketGroup: SocketGroup, port: Port) =
     Stream.eval_(Logger[F].info(s"Starting server on port $port")) ++
       Stream
         .eval(Clients[F])

@@ -1,7 +1,7 @@
 package fs2chat
 package server
 
-import cats.effect.{Blocker, ExitCode, IO, IOApp}
+import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits._
 import com.comcast.ip4s._
 import com.monovore.decline._
@@ -21,12 +21,10 @@ object ServerApp extends IOApp {
     argsParser.parse(args) match {
       case Left(help) => IO(System.err.println(help)).as(ExitCode.Error)
       case Right(port) =>
-        Blocker[IO]
-          .use { blocker =>
-            SocketGroup[IO](blocker).use { socketGroup =>
-              Slf4jLogger.create[IO].flatMap { implicit logger =>
-                Server.start[IO](socketGroup, port).compile.drain
-              }
+        SocketGroup[IO]()
+          .use { socketGroup =>
+            Slf4jLogger.create[IO].flatMap { implicit logger =>
+              Server.start[IO](socketGroup, port).compile.drain
             }
           }
           .as(ExitCode.Success)
