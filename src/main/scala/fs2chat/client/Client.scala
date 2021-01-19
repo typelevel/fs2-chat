@@ -5,38 +5,34 @@ import cats.ApplicativeError
 import cats.effect.{Concurrent, Temporal}
 import com.comcast.ip4s.{IpAddress, SocketAddress}
 import fs2.{RaiseThrowable, Stream}
-import fs2.io.Network
-import fs2.io.tcp.SocketGroup
+import fs2.io.net.Network
 import java.net.ConnectException
 import scala.concurrent.duration._
 
 object Client {
-  def start[F[_]: Temporal: Network](
-      console: Console[F],
-      socketGroup: SocketGroup,
+  def start[F[_]: Temporal: Network: Console](
       address: SocketAddress[IpAddress],
       desiredUsername: Username
   ): Stream[F, Unit] =
-    connect(console, socketGroup, address, desiredUsername).handleErrorWith {
+    connect(address, desiredUsername).handleErrorWith {
       case _: ConnectException =>
         val retryDelay = 5.seconds
-        Stream.eval_(console.errorln(s"Failed to connect. Retrying in $retryDelay.")) ++
-          start(console, socketGroup, address, desiredUsername)
+        Stream.exec(Console[F].errorln(s"Failed to connect. Retrying in $retryDelay.")) ++
+          start(address, desiredUsername)
             .delayBy(retryDelay)
       case _: UserQuit => Stream.empty
+      case t           => Stream.raiseError(t)
     }
 
-  private def connect[F[_]: Concurrent: Network](
-      console: Console[F],
-      socketGroup: SocketGroup,
+  private def connect[F[_]: Concurrent: Network: Console](
       address: SocketAddress[IpAddress],
       desiredUsername: Username
   ): Stream[F, Unit] =
-    Stream.eval_(console.info(s"Connecting to server $address")) ++
+    Stream.exec(Console[F].info(s"Connecting to server $address")) ++
       Stream
-        .resource(socketGroup.client[F](address.toInetSocketAddress))
+        .resource(Network[F].client(address))
         .flatMap { socket =>
-          Stream.eval_(console.info("🎉 Connected! 🎊")) ++
+          Stream.exec(Console[F].info("🎉 Connected! 🎊")) ++
             Stream
               .eval(
                 MessageSocket(
@@ -47,36 +43,34 @@ object Client {
                 )
               )
               .flatMap { messageSocket =>
-                Stream.eval_(
+                Stream.exec(
                   messageSocket.write1(Protocol.ClientCommand.RequestUsername(desiredUsername))
                 ) ++
-                  processIncoming(messageSocket, console).concurrently(
-                    processOutgoing(messageSocket, console)
+                  processIncoming(messageSocket).concurrently(
+                    processOutgoing(messageSocket)
                   )
               }
         }
 
-  private def processIncoming[F[_]](
-      messageSocket: MessageSocket[F, Protocol.ServerCommand, Protocol.ClientCommand],
-      console: Console[F]
+  private def processIncoming[F[_]: Console](
+      messageSocket: MessageSocket[F, Protocol.ServerCommand, Protocol.ClientCommand]
   )(implicit F: ApplicativeError[F, Throwable]): Stream[F, Unit] =
     messageSocket.read.evalMap {
       case Protocol.ServerCommand.Alert(txt) =>
-        console.alert(txt)
+        Console[F].alert(txt)
       case Protocol.ServerCommand.Message(username, txt) =>
-        console.println(s"$username> $txt")
+        Console[F].println(s"$username> $txt")
       case Protocol.ServerCommand.SetUsername(username) =>
-        console.alert("Assigned username: " + username)
+        Console[F].alert("Assigned username: " + username)
       case Protocol.ServerCommand.Disconnect =>
         F.raiseError[Unit](new UserQuit)
     }
 
-  private def processOutgoing[F[_]: RaiseThrowable](
-      messageSocket: MessageSocket[F, Protocol.ServerCommand, Protocol.ClientCommand],
-      console: Console[F]
+  private def processOutgoing[F[_]: RaiseThrowable: Console](
+      messageSocket: MessageSocket[F, Protocol.ServerCommand, Protocol.ClientCommand]
   ): Stream[F, Unit] =
     Stream
-      .repeatEval(console.readLine("> "))
+      .repeatEval(Console[F].readLine("> "))
       .flatMap {
         case Some(txt) => Stream(txt)
         case None      => Stream.raiseError[F](new UserQuit)

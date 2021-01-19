@@ -6,10 +6,7 @@ import cats.implicits._
 import cats.{FlatMap, MonadError}
 import com.comcast.ip4s.Port
 import fs2.Stream
-import fs2.io.Network
-import fs2.io.tcp.{Socket, SocketGroup}
-import io.chrisdavenport.log4cats.Logger
-import java.net.InetSocketAddress
+import fs2.io.net.{Network, Socket}
 import java.util.UUID
 
 object Server {
@@ -74,12 +71,12 @@ object Server {
         .map(ref => new Clients(ref))
   }
 
-  def start[F[_]: Async: Network: Logger](socketGroup: SocketGroup, port: Port) =
-    Stream.eval_(Logger[F].info(s"Starting server on port $port")) ++
+  def start[F[_]: Async: Network: Console](port: Port) =
+    Stream.exec(Console[F].info(s"Starting server on port $port")) ++
       Stream
         .eval(Clients[F])
         .flatMap { clients =>
-          socketGroup.server[F](new InetSocketAddress(port.value)).map { clientSocketResource =>
+          Network[F].server(port = Some(port)).map { clientSocket =>
             def unregisterClient(state: ConnectedClient[F]) =
               clients.unregister(state.id).flatMap { client =>
                 client
@@ -87,46 +84,42 @@ object Server {
                   .traverse_(username =>
                     clients.broadcast(Protocol.ServerCommand.Alert(s"$username disconnected."))
                   )
-              } *> Logger[F].info(s"Unregistered client ${state.id}")
+              } *> Console[F].info(s"Unregistered client ${state.id}")
             Stream
-              .resource(clientSocketResource)
-              .flatMap { clientSocket =>
-                Stream
-                  .bracket(ConnectedClient[F](clientSocket).flatTap(clients.register))(
-                    unregisterClient
-                  )
-                  .flatMap(client => handleClient[F](clients, client, clientSocket))
-              }
+              .bracket(ConnectedClient[F](clientSocket).flatTap(clients.register))(
+                unregisterClient
+              )
+              .flatMap(client => handleClient[F](clients, client, clientSocket))
               .scope
           }
         }
         .parJoinUnbounded
 
-  private def handleClient[F[_]: Concurrent: Logger](
+  private def handleClient[F[_]: Concurrent: Console](
       clients: Clients[F],
       clientState: ConnectedClient[F],
       clientSocket: Socket[F]
   ): Stream[F, Nothing] = {
     logNewClient(clientState, clientSocket) ++
-      Stream.eval_(
+      Stream.exec(
         clientState.messageSocket.write1(Protocol.ServerCommand.Alert("Welcome to FS2 Chat!"))
       ) ++
       processIncoming(clients, clientState.id, clientState.messageSocket)
   }.handleErrorWith {
     case _: UserQuit =>
-      Stream.eval_(Logger[F].info(s"Client quit ${clientState.id}") *> clientSocket.close)
+      Stream.exec(Console[F].info(s"Client quit ${clientState.id}"))
     case err =>
-      Stream.eval_(
-        Logger[F].error(s"Fatal error for client ${clientState.id} - $err") *> clientSocket.close
+      Stream.exec(
+        Console[F].errorln(s"Fatal error for client ${clientState.id} - $err")
       )
   }
 
-  private def logNewClient[F[_]: FlatMap: Logger](
+  private def logNewClient[F[_]: FlatMap: Console](
       clientState: ConnectedClient[F],
       clientSocket: Socket[F]
   ): Stream[F, Nothing] =
-    Stream.eval_(clientSocket.remoteAddress.flatMap { clientAddress =>
-      Logger[F].info(s"Accepted client ${clientState.id} on $clientAddress")
+    Stream.exec(clientSocket.remoteAddress.flatMap { clientAddress =>
+      Console[F].info(s"Accepted client ${clientState.id} on $clientAddress")
     })
 
   private def processIncoming[F[_]](

@@ -5,7 +5,6 @@ import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits._
 import com.comcast.ip4s._
 import com.monovore.decline._
-import fs2.io.tcp.SocketGroup
 
 object ClientApp extends IOApp {
   private val argsParser: Command[(Username, SocketAddress[IpAddress])] =
@@ -32,14 +31,13 @@ object ClientApp extends IOApp {
     argsParser.parse(args) match {
       case Left(help) => IO(System.err.println(help)).as(ExitCode.Error)
       case Right((desiredUsername, address)) =>
-        Console[IO]
-          .flatMap { console =>
-            SocketGroup[IO]().use { socketGroup =>
-              Client
-                .start[IO](console, socketGroup, address, desiredUsername)
-                .compile
-                .drain
-            }
+        Console
+          .create[IO]
+          .flatMap { implicit console =>
+            Client
+              .start[IO](address, desiredUsername)
+              .compile
+              .drain
           }
           .as(ExitCode.Success)
     }

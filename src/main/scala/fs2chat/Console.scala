@@ -1,5 +1,4 @@
 package fs2chat
-package client
 
 import cats.effect.Sync
 import cats.implicits._
@@ -18,7 +17,9 @@ trait Console[F[_]] {
 
 object Console {
 
-  def apply[F[_]: Sync]: F[Console[F]] =
+  def apply[F[_]](implicit F: Console[F]): F.type = F
+
+  def create[F[_]: Sync]: F[Console[F]] =
     Sync[F].delay {
       new Console[F] {
         private[this] val reader =
@@ -53,6 +54,7 @@ object Console {
             .handleErrorWith {
               case _: EndOfFileException     => (None: Option[String]).pure[F]
               case _: UserInterruptException => (None: Option[String]).pure[F]
+              case t                         => Sync[F].raiseError(t)
             }
       }
     }

@@ -5,8 +5,6 @@ import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits._
 import com.comcast.ip4s._
 import com.monovore.decline._
-import fs2.io.tcp.SocketGroup
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 
 object ServerApp extends IOApp {
   private val argsParser: Command[Port] =
@@ -21,12 +19,9 @@ object ServerApp extends IOApp {
     argsParser.parse(args) match {
       case Left(help) => IO(System.err.println(help)).as(ExitCode.Error)
       case Right(port) =>
-        SocketGroup[IO]()
-          .use { socketGroup =>
-            Slf4jLogger.create[IO].flatMap { implicit logger =>
-              Server.start[IO](socketGroup, port).compile.drain
-            }
-          }
+        Console
+          .create[IO]
+          .flatMap(implicit console => Server.start[IO](port).compile.drain)
           .as(ExitCode.Success)
     }
 }
