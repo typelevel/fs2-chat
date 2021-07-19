@@ -12,7 +12,7 @@ object ServerApp extends IOApp {
       Opts
         .option[Int]("port", "Port to bind for connection requests")
         .withDefault(5555)
-        .mapValidated(p => Port(p).toValidNel("Invalid port number"))
+        .mapValidated(p => Port.fromInt(p).toValidNel("Invalid port number"))
     }
 
   def run(args: List[String]): IO[ExitCode] =
