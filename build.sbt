@@ -17,6 +17,4 @@ run / connectInput := true
 
 scalafmtOnCompile := true
 
-scalacOptions ++= List("-feature")
-
 enablePlugins(UniversalPlugin, JavaAppPackaging)

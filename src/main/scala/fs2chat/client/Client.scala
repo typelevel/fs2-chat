@@ -9,7 +9,7 @@ import fs2.io.net.Network
 import java.net.ConnectException
 import scala.concurrent.duration._
 
-object Client {
+object Client:
   def start[F[_]: Temporal: Network: Console](
       address: SocketAddress[IpAddress],
       desiredUsername: Username
@@ -77,4 +77,3 @@ object Client {
       }
       .map(txt => Protocol.ClientCommand.SendMessage(txt))
       .evalMap(messageSocket.write1)
-}

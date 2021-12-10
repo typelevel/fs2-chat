@@ -6,7 +6,7 @@ import cats.implicits._
 import com.comcast.ip4s._
 import com.monovore.decline._
 
-object ClientApp extends IOApp {
+object ClientApp extends IOApp:
   private val argsParser: Command[(Username, SocketAddress[IpAddress])] =
     Command("fs2chat-client", "FS2 Chat Client") {
       (
@@ -27,7 +27,7 @@ object ClientApp extends IOApp {
     }
 
   def run(args: List[String]): IO[ExitCode] =
-    argsParser.parse(args) match {
+    argsParser.parse(args) match
       case Left(help) => IO(System.err.println(help)).as(ExitCode.Error)
       case Right((desiredUsername, address)) =>
         Console
@@ -39,5 +39,3 @@ object ClientApp extends IOApp {
               .drain
           }
           .as(ExitCode.Success)
-    }
-}

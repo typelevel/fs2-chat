@@ -7,15 +7,14 @@ import org.jline.reader.LineReaderBuilder
 import org.jline.reader.UserInterruptException
 import org.jline.utils.{AttributedStringBuilder, AttributedStyle}
 
-trait Console[F[_]] {
+trait Console[F[_]]:
   def println(msg: String): F[Unit]
   def info(msg: String): F[Unit]
   def alert(msg: String): F[Unit]
   def errorln(msg: String): F[Unit]
   def readLine(prompt: String): F[Option[String]]
-}
 
-object Console {
+object Console:
 
   def apply[F[_]](implicit F: Console[F]): F.type = F
 
@@ -58,4 +57,3 @@ object Console {
             }
       }
     }
-}

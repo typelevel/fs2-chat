@@ -6,7 +6,7 @@ import cats.implicits._
 import com.comcast.ip4s._
 import com.monovore.decline._
 
-object ServerApp extends IOApp {
+object ServerApp extends IOApp:
   private val argsParser: Command[Port] =
     Command("fs2chat-server", "FS2 Chat Server") {
       Opts
@@ -16,12 +16,10 @@ object ServerApp extends IOApp {
     }
 
   def run(args: List[String]): IO[ExitCode] =
-    argsParser.parse(args) match {
+    argsParser.parse(args) match
       case Left(help) => IO(System.err.println(help)).as(ExitCode.Error)
       case Right(port) =>
         Console
           .create[IO]
           .flatMap(implicit console => Server.start[IO](port).compile.drain)
           .as(ExitCode.Success)
-    }
-}
