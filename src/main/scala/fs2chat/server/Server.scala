@@ -11,14 +11,13 @@ import java.util.UUID
 
 object Server {
 
-  /**
-    * Represents a client that has connected to this server.
+  /** Represents a client that has connected to this server.
     *
-    * After connecting, clients must send a [[Protocol.ClientCommand.RequestUsername]]
-    * message, requesting a username. The server will either accept that request or
-    * in the event that the request username is taken, will assign a unique username.
-    * Until this exchange has completed, the `username` field is `None` and the client
-    * will receive no messages or alerts from the server.
+    * After connecting, clients must send a [[Protocol.ClientCommand.RequestUsername]] message,
+    * requesting a username. The server will either accept that request or in the event that the
+    * request username is taken, will assign a unique username. Until this exchange has completed,
+    * the `username` field is `None` and the client will receive no messages or alerts from the
+    * server.
     */
   private case class ConnectedClient[F[_]](
       id: UUID,

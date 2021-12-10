@@ -5,12 +5,10 @@ import cats.effect.std.Queue
 import cats.implicits._
 import fs2.Stream
 import fs2.io.net.Socket
+import fs2.interop.scodec.{StreamDecoder, StreamEncoder}
 import scodec.{Decoder, Encoder}
-import scodec.stream.{StreamDecoder, StreamEncoder}
 
-/**
-  * Socket which reads a stream of messages of type `In` and allows writing
-  * messages of type `Out`.
+/** Socket which reads a stream of messages of type `In` and allows writing messages of type `Out`.
   */
 trait MessageSocket[F[_], In, Out] {
   def read: Stream[F, In]

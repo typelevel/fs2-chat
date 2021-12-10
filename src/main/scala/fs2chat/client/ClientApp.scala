@@ -21,9 +21,8 @@ object ClientApp extends IOApp {
           .option[Int]("port", "Port of chat server")
           .withDefault(5555)
           .mapValidated(p => Port.fromInt(p).toValidNel("Invalid port number"))
-      ).mapN {
-        case (desiredUsername, ip, port) =>
-          desiredUsername -> SocketAddress(ip, port)
+      ).mapN { case (desiredUsername, ip, port) =>
+        desiredUsername -> SocketAddress(ip, port)
       }
     }
 

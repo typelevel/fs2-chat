@@ -20,3 +20,4 @@ test-output
 .bloop
 project/metals.sbt
 .bsp
+project/project
