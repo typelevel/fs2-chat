@@ -21,7 +21,7 @@ object Console:
   def create[F[_]: Sync]: F[Console[F]] =
     Sync[F].delay {
       new Console[F] {
-        private[this] val reader =
+        private val reader =
           LineReaderBuilder.builder().appName("fs2chat").build()
         reader.setOpt(org.jline.reader.LineReader.Option.ERASE_LINE_ON_FINISH)
 
