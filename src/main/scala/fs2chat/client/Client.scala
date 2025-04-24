@@ -30,7 +30,7 @@ object Client:
   ): Stream[F, Unit] =
     Stream.exec(Console[F].info(s"Connecting to server $address")) ++
       Stream
-        .resource(Network[F].client(address))
+        .resource(Network[F].connect(address))
         .flatMap { socket =>
           Stream.exec(Console[F].info("🎉 Connected! 🎊")) ++
             Stream
